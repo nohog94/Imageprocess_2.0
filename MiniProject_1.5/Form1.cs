@@ -9,11 +9,19 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
+using System.Net;
+using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Support.UI;
 
 namespace MiniProject_1._5
 {
     public partial class Form1 : Form
     {
+        protected ChromeDriverService _driverService = null;
+        protected ChromeOptions _options = null;
+        protected ChromeDriver _driver = null;
+
         public Form1()
         {
             InitializeComponent();
@@ -31,9 +39,14 @@ namespace MiniProject_1._5
 
         const int RGB = 3, RR = 0, GG = 1, BB = 2;
 
-        private void 열기ToolStripMenuItem_Click(object sender, EventArgs e)
+        private void 로컬ToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            openImage();       
+            openImage();
+        }
+
+        private void 검색ToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            open_random_Image();
         }
 
         private void Form1_Load(object sender, EventArgs e)
@@ -55,7 +68,7 @@ namespace MiniProject_1._5
 
         private void 열기ToolStripMenuItem_Click_1(object sender, EventArgs e)
         {
-            openImage();
+
         }
 
         private void 저장ToolStripMenuItem_Click(object sender, EventArgs e)
@@ -288,7 +301,6 @@ namespace MiniProject_1._5
             btnZoomOut.BackColor = Cyan;
         }
 
-
         /// //////////////////
         /// 공통 함수부
         /// 
@@ -418,14 +430,14 @@ namespace MiniProject_1._5
             else if (change_flag[9] == 1)
             {
                 string scale_zoom_in = Microsoft.VisualBasic.Interaction.InputBox("몇 배 확대할 건지 입력하세요", "입력", "0");
-                try
-                {
-                   zoom_in(double.Parse(scale_zoom_in));
-                }
-                catch
-                {
-                    MessageBox.Show("올바른 형식으로 입력하세요, (실수)");
-                }
+                //try
+                //{
+                zoom_in(double.Parse(scale_zoom_in));
+                //}
+                //catch
+                //{
+                //    MessageBox.Show("올바른 형식으로 입력하세요, (실수)");
+                //}
             }
             else if (change_flag[10] == 1)
             {
@@ -455,17 +467,66 @@ namespace MiniProject_1._5
             // 파일 크기 알아내기 (?)
             bitmap = new Bitmap(fileName);
             // 중요! 입력이미지의 높이, 폭 알아내기
-            inW = bitmap.Height;
-            inH = bitmap.Width;
+            inH = bitmap.Height;
+            inW = bitmap.Width;
             inImage = new byte[RGB, inH, inW]; // 메모리 할당
             for (int i = 0; i < inH; i++)
                 for (int k = 0; k < inW; k++)
                 {
-                    Color c = bitmap.GetPixel(i, k);
+                    Color c = bitmap.GetPixel(k, i);
                     inImage[RR, i, k] = c.R;
                     inImage[GG, i, k] = c.G;
                     inImage[BB, i, k] = c.B;
                 }
+            equal_image();
+        }
+
+        void open_random_Image()
+        {
+            upload_flag = 1;
+            string keyword = Microsoft.VisualBasic.Interaction.InputBox("키워드를 입력하세요", "입력", "0");
+            string resource_url = "https://www.pexels.com/search/";
+            resource_url = resource_url + keyword;
+
+            _driverService = ChromeDriverService.CreateDefaultService();
+            _driverService.HideCommandPromptWindow = true;
+            _options = new ChromeOptions();
+            _options.AddArgument("disable-gpu");
+
+            _driver = new ChromeDriver(_driverService, _options);
+            _driver.Navigate().GoToUrl(resource_url);
+            _driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(10);
+
+            var searchBox = _driver.FindElementByXPath("//img[@class='photo-item__img']");
+            string attribute = searchBox.GetAttribute("srcset");
+            string[] trimmed_attribute = attribute.Split(',');
+            String url_address = trimmed_attribute[0];
+            url_address = url_address.Substring(0, url_address.Length - 3);
+            url_address = url_address + "&h=500";
+            var request = (HttpWebRequest)WebRequest.Create(url_address);
+
+            using (var stream = request.GetResponse().GetResponseStream())
+            {
+                using (var image = Image.FromStream(stream))
+                {
+                    bitmap = new Bitmap(image);
+                    //use or return bitmap, image will automatically get disposed
+                }
+            }
+            _driver.Close();
+
+            inH = bitmap.Height;
+            inW = bitmap.Width;
+            inImage = new byte[RGB, inH, inW]; // 메모리 할당
+            for (int i = 0; i < inH; i++)
+                for (int k = 0; k < inW; k++)
+                {
+                    Color c = bitmap.GetPixel(k, i);
+                    inImage[RR, i, k] = c.R;
+                    inImage[GG, i, k] = c.G;
+                    inImage[BB, i, k] = c.B;
+                }
+            
             equal_image();
         }
 
@@ -500,9 +561,9 @@ namespace MiniProject_1._5
             for (int i = 0; i < outH; i++)
                 for (int k = 0; k < outW; k++)
                 {
-                    byte r = outImage[RR, k, i]; // 잉크(색상값)
-                    byte g = outImage[GG, k, i]; // 잉크(색상값)
-                    byte b = outImage[BB, k, i]; // 잉크(색상값)
+                    byte r = outImage[RR, i, k]; // 잉크(색상값)
+                    byte g = outImage[GG, i, k]; // 잉크(색상값)
+                    byte b = outImage[BB, i, k]; // 잉크(색상값)
                     pen = Color.FromArgb(r, g, b); // 펜에 잉크 묻히기
 
                     try
@@ -547,7 +608,7 @@ namespace MiniProject_1._5
         /// //////////////////
         /// 영상 처리 함수부
         void equal_image()
-        {
+        {  
             if (inImage == null)
                 return;
             outH = inH; outW = inW;
@@ -563,12 +624,15 @@ namespace MiniProject_1._5
 
         void equal_image2()
         {
+            inH = outH; inW = outW;
+            inImage = new byte[RGB, inH, inW];
             for (int rgb = 0; rgb < RGB; rgb++)
                 for (int i = 0; i < inH; i++)
                     for (int k = 0; k < inW; k++)
                     {
                         inImage[rgb, i, k] = outImage[rgb, i, k];
                     }
+
         }
 
         void bright(int color)
@@ -617,7 +681,6 @@ namespace MiniProject_1._5
             displayImage();
             equal_image2();
         }
-
 
 
         void black_and_white()
@@ -757,8 +820,8 @@ namespace MiniProject_1._5
                         /* 첨부한 그림 참조 */
                         temp_after_rotate_x = (int)(Math.Cos(angle * Math.PI / 180) * temp_x + Math.Sin(angle * Math.PI / 180) * temp_y);
                         temp_after_rotate_y = (int)(-Math.Sin(angle * Math.PI / 180) * temp_x + Math.Cos(angle * Math.PI / 180) * temp_y);
-                        if (temp_after_rotate_x < inH / 2 && temp_after_rotate_x > -inH / 2 &&
-                            temp_after_rotate_y < inW / 2 && temp_after_rotate_y > -inW / 2)
+                        if (temp_after_rotate_y < inH / 2 && temp_after_rotate_y > -inH / 2 &&
+                            temp_after_rotate_x < inW / 2 && temp_after_rotate_x > -inW / 2)
                             /* 영역을 벗어나지 않은 부분에 대해서만 값 입력 */
                             outImage[rgb, i, j] = inImage[rgb, inH / 2 - temp_after_rotate_y, temp_after_rotate_x + inW / 2];
                         else
@@ -772,6 +835,10 @@ namespace MiniProject_1._5
         void zoom_in(double scale)
         {
             outH = (int)(inH * scale); outW = (int)(inW * scale);
+            if (outH > 500)
+                outH = 500;
+            if (outW > 500)
+                outW = 500;
             outImage = new byte[RGB, outH, outW];
             for (int rgb = 0; rgb < RGB; rgb++)
                 for (int i = 0; i < outH; i++)
@@ -794,6 +861,7 @@ namespace MiniProject_1._5
                         outImage[rgb, i, k] = inImage[rgb, i * (byte)scale, k * (byte)scale];
                     }
             displayImage();
+            equal_image2();
         }
     }
 }
